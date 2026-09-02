@@ -6,7 +6,11 @@ from langchain_core.messages import AIMessage
 from backend import config
 from backend.graph.build import continue_to_researchers
 from backend.graph.nodes.critic import route_after_critic, route_after_critic_feedback
-from backend.graph.nodes.routing import RouteDecision, route_after_router, router_node
+from backend.graph.nodes.routing import (
+    ComplexityAssessment,
+    route_after_router,
+    router_node,
+)
 from tests.conftest import tool_call
 
 
@@ -22,18 +26,64 @@ class TestRouteAfterRouter:
 
 
 class TestRouterNode:
-    @pytest.mark.asyncio
-    async def test_uses_the_models_decision(self, fake_llm):
-        fake_llm(structured={"RouteDecision": RouteDecision(mode="direct", reason="trivial")})
-        result = await router_node({"topic": "what is 2+2"})
-        assert result["mode"] == "direct"
-        assert result["route_reason"] == "trivial"
+    """The reported bug: a simple question ran the whole research pipeline."""
 
     @pytest.mark.asyncio
-    async def test_falls_back_to_research_when_the_router_fails(self, fake_llm, monkeypatch):
-        fake_llm()  # no scripted RouteDecision, so with_structured_output raises
-        result = await router_node({"topic": "anything"})
+    async def test_a_settled_question_is_routed_direct_without_any_api_call(self, fake_llm):
+        llm = fake_llm()  # nothing scripted: any API call would raise
+        result = await router_node({"topic": "what is the capital of france"})
+
+        assert result["mode"] == "direct"
+        assert result["complexity"] == 0
+        # This is the regression guard. Routing must not depend on the API being
+        # reachable, or an exhausted quota sends simple questions to research.
+        assert llm.calls == 0
+
+    @pytest.mark.asyncio
+    async def test_an_obvious_research_topic_also_skips_the_routing_call(self, fake_llm):
+        llm = fake_llm()
+        result = await router_node({"topic": "compare solar and wind power"})
+
         assert result["mode"] == "research"
+        # No score: the planner judges scope itself, as it would anyway.
+        assert result["complexity"] is None
+        assert llm.calls == 0
+
+    @pytest.mark.asyncio
+    async def test_an_ambiguous_query_is_scored_by_the_model(self, fake_llm):
+        llm = fake_llm(
+            structured={"ComplexityAssessment": ComplexityAssessment(complexity=3, reason="broad")}
+        )
+        result = await router_node({"topic": "how does photosynthesis work"})
+
+        assert result["mode"] == "research"
+        assert result["complexity"] == 3
+        assert result["route_reason"] == "broad"
+        assert llm.calls == 1
+
+    @pytest.mark.asyncio
+    async def test_a_zero_score_from_the_model_takes_the_direct_path(self, fake_llm):
+        fake_llm(
+            structured={"ComplexityAssessment": ComplexityAssessment(complexity=0, reason="simple")}
+        )
+        result = await router_node({"topic": "is intermittent fasting effective"})
+        assert result["mode"] == "direct"
+        assert result["complexity"] == 0
+
+    @pytest.mark.asyncio
+    async def test_an_over_range_score_is_clamped(self, fake_llm):
+        fake_llm(
+            structured={"ComplexityAssessment": ComplexityAssessment(complexity=5, reason="huge")}
+        )
+        result = await router_node({"topic": "how does photosynthesis work"})
+        assert result["complexity"] <= config.MAX_SUBTASKS
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_research_when_the_model_is_unreachable(self, fake_llm):
+        fake_llm()  # nothing scripted, so the structured call raises
+        result = await router_node({"topic": "how does photosynthesis work"})
+        assert result["mode"] == "research"
+        assert result["complexity"] is None
 
 
 class TestRouteAfterCritic:

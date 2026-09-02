@@ -20,43 +20,56 @@ def _doc(text, source):
 class TestPlannerNode:
     @pytest.mark.asyncio
     async def test_honours_a_small_subtask_count(self, fake_llm):
-        fake_llm(structured={"PlannerOutput": PlannerOutput(complexity="narrow", subtasks=["one"])})
+        fake_llm(structured={"PlannerOutput": PlannerOutput(subtasks=["one"])})
         result = await planner_node({"topic": "t", "iteration": 0})
         assert result["subtasks"] == ["one"]
-        assert result["complexity"] == "narrow"
         assert result["iteration"] == 1
 
     @pytest.mark.asyncio
     async def test_clamps_an_overlong_plan(self, fake_llm):
         too_many = [f"s{i}" for i in range(9)]
-        fake_llm(structured={"PlannerOutput": PlannerOutput(complexity="broad", subtasks=too_many)})
+        fake_llm(structured={"PlannerOutput": PlannerOutput(subtasks=too_many)})
         result = await planner_node({"topic": "t", "iteration": 0})
         assert len(result["subtasks"]) == config.MAX_SUBTASKS
 
     @pytest.mark.asyncio
     async def test_never_fans_out_to_zero_researchers(self, fake_llm):
-        fake_llm(structured={"PlannerOutput": PlannerOutput(complexity="x", subtasks=["", "   "])})
+        fake_llm(structured={"PlannerOutput": PlannerOutput(subtasks=["", "   "])})
         result = await planner_node({"topic": "the topic", "iteration": 0})
         assert result["subtasks"] == ["the topic"]
 
     @pytest.mark.asyncio
+    async def test_a_seeded_score_asks_for_exactly_that_many_subtasks(self, fake_llm):
+        llm = fake_llm(structured={"PlannerOutput": PlannerOutput(subtasks=["a", "b"])})
+        await planner_node(
+            {"topic": "t", "iteration": 0, "complexity": 2, "route_reason": "two angles"}
+        )
+        prompt = llm.prompts[0]
+        assert "exactly 2 subtasks" in prompt
+        assert "two angles" in prompt
+
+    @pytest.mark.asyncio
+    async def test_an_unseeded_round_judges_scope_itself(self, fake_llm):
+        llm = fake_llm(structured={"PlannerOutput": PlannerOutput(subtasks=["a"])})
+        await planner_node({"topic": "t", "iteration": 0, "complexity": None})
+        prompt = llm.prompts[0]
+        assert "First judge how much this topic actually demands" in prompt
+
+    @pytest.mark.asyncio
+    async def test_a_seeded_count_of_one_reads_naturally(self, fake_llm):
+        llm = fake_llm(structured={"PlannerOutput": PlannerOutput(subtasks=["a"])})
+        await planner_node({"topic": "t", "iteration": 0, "complexity": 1})
+        assert "exactly 1 subtask" in llm.prompts[0]
+
+    @pytest.mark.asyncio
     async def test_gap_round_prompt_carries_both_problem_lists(self, fake_llm):
-        llm = fake_llm(structured={"PlannerOutput": PlannerOutput(complexity="x", subtasks=["new"])})
-        captured = {}
-
-        class Capturing:
-            def __init__(self, schema):
-                self.schema = schema
-
-            async def ainvoke(self, prompt, **_kw):
-                captured["prompt"] = prompt
-                return PlannerOutput(complexity="x", subtasks=["new"])
-
-        llm.with_structured_output = Capturing
+        llm = fake_llm(structured={"PlannerOutput": PlannerOutput(subtasks=["new"])})
+        # A loop-back must not be seeded with round one's score.
         await planner_node(
             {
                 "topic": "t",
                 "iteration": 1,
+                "complexity": 3,
                 "researcher_findings": [
                     {"subtask": "old", "content": "c", "sources": [], "iteration": 1}
                 ],
@@ -65,9 +78,11 @@ class TestPlannerNode:
                 "unsupported": ["X causes Y"],
             }
         )
-        assert "what about cost" in captured["prompt"]
-        assert "X causes Y" in captured["prompt"]
-        assert "old" in captured["prompt"]
+        prompt = llm.prompts[0]
+        assert "what about cost" in prompt
+        assert "X causes Y" in prompt
+        assert "old" in prompt
+        assert "exactly 3" not in prompt
 
 
 class TestResearcherNode:

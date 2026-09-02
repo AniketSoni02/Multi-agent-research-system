@@ -3,7 +3,7 @@
 Re-exported here so build.py wires the topology from one flat import.
 """
 
-from backend.graph.nodes.common import ask, get_llm, text_of
+from backend.graph.nodes.common import ask, call, get_llm, text_of
 from backend.graph.nodes.critic import (
     CriticVerdict,
     critic_feedback_node,
@@ -23,7 +23,7 @@ from backend.graph.nodes.research import (
     synthesizer_node,
 )
 from backend.graph.nodes.routing import (
-    RouteDecision,
+    ComplexityAssessment,
     direct_answer_node,
     route_after_router,
     router_node,
@@ -31,9 +31,10 @@ from backend.graph.nodes.routing import (
 
 __all__ = [
     "ask",
+    "call",
     "get_llm",
     "text_of",
-    "RouteDecision",
+    "ComplexityAssessment",
     "router_node",
     "route_after_router",
     "direct_answer_node",

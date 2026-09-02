@@ -12,7 +12,7 @@ from backend import config
 from backend.graph.build import build_graph
 from backend.graph.nodes.critic import CriticVerdict
 from backend.graph.nodes.research import PlannerOutput
-from backend.graph.nodes.routing import RouteDecision
+from backend.graph.nodes.routing import ComplexityAssessment
 from backend.graph.state import initial_state
 from tests.conftest import tool_call
 
@@ -41,7 +41,7 @@ class TestDirectPath:
     @pytest.mark.asyncio
     async def test_a_simple_question_skips_the_whole_research_pipeline(self, fake_llm, no_network):
         fake_llm(
-            structured={"RouteDecision": RouteDecision(mode="direct", reason="one fact")},
+            structured={"ComplexityAssessment": ComplexityAssessment(complexity=0, reason="one fact")},
             text="# CPU\n\nCentral Processing Unit.",
         )
         seen, final = await run(build_graph(), topic="what does CPU stand for")
@@ -51,14 +51,67 @@ class TestDirectPath:
         assert final["final_report"].startswith("# CPU")
         assert final["approved"] is True
 
+    @pytest.mark.asyncio
+    async def test_the_reported_case_costs_exactly_one_llm_call(self, fake_llm, no_network):
+        """"what is the capital of france" ran the full pipeline. It must not.
+
+        Nothing is scripted for the router here, so if routing tried to reach the
+        model at all the run would fail rather than quietly answering.
+        """
+        llm = fake_llm(text="# Paris\n\nParis is the capital of France.")
+        seen, final = await run(build_graph(), topic="what is the capital of france")
+
+        assert seen == ["router", "direct_answer"]
+        # The routing decision is free; only the answer costs anything.
+        assert llm.calls == 1
+        assert final["final_report"].startswith("# Paris")
+        assert final["approved"] is True
+
+    @pytest.mark.asyncio
+    async def test_an_obvious_research_topic_still_runs_the_pipeline(self, fake_llm, no_network):
+        """The free heuristic must not shortcut something that needs sources."""
+        fake_llm(
+            structured={
+                "PlannerOutput": PlannerOutput(subtasks=["a", "b"]),
+                "CriticVerdict": CriticVerdict(approved=True, feedback="ok", missing=[], unsupported=[]),
+            },
+            tool_turns=[AIMessage(content="reviewed")],
+            text="# Draft",
+        )
+        seen, final = await run(build_graph(), topic="compare solar and wind power")
+
+        assert seen[0] == "router"
+        assert seen.count("researcher") == 2
+        assert seen[-1] == "finalize"
+        # The router skipped its own call and left the scope to the planner.
+        assert final["complexity"] is None
+
+    @pytest.mark.asyncio
+    async def test_a_scored_topic_seeds_the_planner_with_that_many_researchers(
+        self, fake_llm, no_network
+    ):
+        fake_llm(
+            structured={
+                "ComplexityAssessment": ComplexityAssessment(complexity=2, reason="two angles"),
+                "PlannerOutput": PlannerOutput(subtasks=["a", "b"]),
+                "CriticVerdict": CriticVerdict(approved=True, feedback="ok", missing=[], unsupported=[]),
+            },
+            tool_turns=[AIMessage(content="reviewed")],
+            text="# Draft",
+        )
+        seen, final = await run(build_graph(), topic="how does photosynthesis work")
+
+        assert final["complexity"] == 2
+        assert seen.count("researcher") == 2
+
 
 class TestResearchPath:
     @pytest.mark.asyncio
     async def test_fans_out_joins_and_finalizes_on_approval(self, fake_llm, no_network):
         fake_llm(
             structured={
-                "RouteDecision": RouteDecision(mode="research", reason="multi-faceted"),
-                "PlannerOutput": PlannerOutput(complexity="three angles", subtasks=["a", "b", "c"]),
+                "ComplexityAssessment": ComplexityAssessment(complexity=3, reason="multi-faceted"),
+                "PlannerOutput": PlannerOutput(subtasks=["a", "b", "c"]),
                 "CriticVerdict": CriticVerdict(approved=True, feedback="solid", missing=[], unsupported=[]),
             },
             tool_turns=[AIMessage(content="the draft holds up")],
@@ -82,8 +135,8 @@ class TestResearchPath:
     async def test_the_critic_gathers_evidence_before_the_verdict(self, fake_llm, no_network):
         fake_llm(
             structured={
-                "RouteDecision": RouteDecision(mode="research", reason="x"),
-                "PlannerOutput": PlannerOutput(complexity="x", subtasks=["a"]),
+                "ComplexityAssessment": ComplexityAssessment(complexity=3, reason="x"),
+                "PlannerOutput": PlannerOutput(subtasks=["a"]),
                 "CriticVerdict": CriticVerdict(approved=True, feedback="ok", missing=[], unsupported=[]),
             },
             tool_turns=[
@@ -111,8 +164,8 @@ class TestResearchPath:
         # A critic that asks for a tool on every single turn, forever.
         fake_llm(
             structured={
-                "RouteDecision": RouteDecision(mode="research", reason="x"),
-                "PlannerOutput": PlannerOutput(complexity="x", subtasks=["a"]),
+                "ComplexityAssessment": ComplexityAssessment(complexity=3, reason="x"),
+                "PlannerOutput": PlannerOutput(subtasks=["a"]),
                 "CriticVerdict": CriticVerdict(approved=True, feedback="ok", missing=[], unsupported=[]),
             },
             tool_turns=[
@@ -134,10 +187,10 @@ class TestReviewLoop:
     ):
         fake_llm(
             structured={
-                "RouteDecision": RouteDecision(mode="research", reason="x"),
+                "ComplexityAssessment": ComplexityAssessment(complexity=3, reason="x"),
                 "PlannerOutput": [
-                    PlannerOutput(complexity="round 1", subtasks=["a", "b"]),
-                    PlannerOutput(complexity="round 2", subtasks=["c"]),
+                    PlannerOutput(subtasks=["a", "b"]),
+                    PlannerOutput(subtasks=["c"]),
                 ],
                 "CriticVerdict": [
                     CriticVerdict(
@@ -163,8 +216,8 @@ class TestReviewLoop:
     ):
         fake_llm(
             structured={
-                "RouteDecision": RouteDecision(mode="research", reason="x"),
-                "PlannerOutput": PlannerOutput(complexity="x", subtasks=["a"]),
+                "ComplexityAssessment": ComplexityAssessment(complexity=3, reason="x"),
+                "PlannerOutput": PlannerOutput(subtasks=["a"]),
                 "CriticVerdict": CriticVerdict(
                     approved=False,
                     feedback="still thin",
@@ -187,8 +240,8 @@ class TestReviewLoop:
     async def test_each_round_judges_only_its_own_evidence(self, fake_llm, no_network):
         fake_llm(
             structured={
-                "RouteDecision": RouteDecision(mode="research", reason="x"),
-                "PlannerOutput": PlannerOutput(complexity="x", subtasks=["a"]),
+                "ComplexityAssessment": ComplexityAssessment(complexity=3, reason="x"),
+                "PlannerOutput": PlannerOutput(subtasks=["a"]),
                 "CriticVerdict": [
                     CriticVerdict(approved=False, feedback="thin", missing=["gap"], unsupported=[]),
                     CriticVerdict(approved=True, feedback="ok", missing=[], unsupported=[]),
@@ -217,8 +270,8 @@ class TestStreamSerialization:
 
         fake_llm(
             structured={
-                "RouteDecision": RouteDecision(mode="research", reason="x"),
-                "PlannerOutput": PlannerOutput(complexity="x", subtasks=["a"]),
+                "ComplexityAssessment": ComplexityAssessment(complexity=3, reason="x"),
+                "PlannerOutput": PlannerOutput(subtasks=["a"]),
                 "CriticVerdict": CriticVerdict(approved=True, feedback="ok", missing=[], unsupported=[]),
             },
             tool_turns=[

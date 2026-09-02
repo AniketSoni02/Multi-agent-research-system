@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from backend import config
 from backend.graph import prompts
-from backend.graph.nodes.common import ask, get_llm
+from backend.graph.nodes.common import ask, call, get_llm
 from backend.graph.state import Finding, ResearcherInput, ResearchState
 from backend.tools import retriever, web_search
 
@@ -15,9 +15,6 @@ logger = logging.getLogger(__name__)
 
 
 class PlannerOutput(BaseModel):
-    complexity: str = Field(
-        description="One line on why the topic warrants this many subtasks."
-    )
     subtasks: List[str] = Field(description="The research subtasks, each self-contained.")
 
 
@@ -26,8 +23,18 @@ class PlannerOutput(BaseModel):
 
 async def planner_node(state: ResearchState) -> dict:
     iteration = state.get("iteration", 0)
+    seeded = state.get("complexity")
 
-    if iteration == 0:
+    if iteration == 0 and isinstance(seeded, int) and seeded > 0:
+        # The router already judged the scope, so word that many subtasks rather
+        # than re-deciding and risking a different answer.
+        prompt = prompts.PLANNER_SEEDED.format(
+            topic=state["topic"],
+            n=seeded,
+            s="" if seeded == 1 else "s",
+            reason=state.get("route_reason", "") or "(not recorded)",
+        )
+    elif iteration == 0:
         prompt = prompts.PLANNER_FIRST_ROUND.format(
             topic=state["topic"], hi=config.MAX_SUBTASKS
         )
@@ -41,8 +48,7 @@ async def planner_node(state: ResearchState) -> dict:
             unsupported="\n".join(f"- {u}" for u in state.get("unsupported", [])) or "(none listed)",
         )
 
-    planner = get_llm().with_structured_output(PlannerOutput)
-    result: PlannerOutput = await planner.ainvoke(prompt)
+    result: PlannerOutput = await call(get_llm().with_structured_output(PlannerOutput), prompt)
 
     subtasks = [s.strip() for s in result.subtasks if s and s.strip()]
     if not subtasks:
@@ -51,17 +57,8 @@ async def planner_node(state: ResearchState) -> dict:
         subtasks = [state["topic"]]
     subtasks = subtasks[: config.MAX_SUBTASKS]
 
-    logger.info(
-        "planner round %s produced %s subtasks (%s)",
-        iteration + 1,
-        len(subtasks),
-        result.complexity,
-    )
-    return {
-        "subtasks": subtasks,
-        "complexity": result.complexity,
-        "iteration": iteration + 1,
-    }
+    logger.info("planner round %s produced %s subtasks", iteration + 1, len(subtasks))
+    return {"subtasks": subtasks, "iteration": iteration + 1}
 
 
 # ------------------------------------------------------------------------ researcher

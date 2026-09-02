@@ -57,7 +57,11 @@ const ResearchStream = (() => {
 
       switch (data.node) {
         case "router":
-          Pipeline.routed(output.mode || "research", output.route_reason || "");
+          Pipeline.routed(
+            output.mode || "research",
+            output.complexity,
+            output.route_reason || ""
+          );
           break;
 
         case "direct_answer":
@@ -71,7 +75,7 @@ const ResearchStream = (() => {
             Pipeline.log("Planner is re-planning around the critic's findings", "warning");
             sawRejectingCritic = false;
           }
-          Pipeline.beginRound(output.subtasks || [], output.iteration || 1, output.complexity || "");
+          Pipeline.beginRound(output.subtasks || [], output.iteration || 1);
           break;
 
         case "researcher": {

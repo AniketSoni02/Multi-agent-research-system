@@ -99,9 +99,16 @@ const Pipeline = (() => {
   /* The router decides whether any of the research machinery runs at all. On the
      direct path the four research stages never fire, so mark them skipped rather
      than leaving them looking stuck. */
-  function routed(mode, reason) {
+  function routed(mode, complexity, reason) {
     setState("router", "complete");
-    el.routerDetail.textContent = mode === "direct" ? "Direct answer" : "Full research";
+    if (mode === "direct") {
+      el.routerDetail.textContent = "Direct answer";
+    } else {
+      el.routerDetail.textContent =
+        typeof complexity === "number" && complexity > 0
+          ? `Research · ${complexity} subtask${complexity === 1 ? "" : "s"}`
+          : "Research";
+    }
     log(`Router chose ${mode}: ${reason}`, mode === "direct" ? "accent" : "muted");
 
     if (mode === "direct") {
@@ -124,7 +131,7 @@ const Pipeline = (() => {
 
   /* A second planner event after a rejecting critic means we looped back:
      clear the downstream stages so the new round reads as a fresh pass. */
-  function beginRound(subtasks, round, complexity) {
+  function beginRound(subtasks, round) {
     iteration = round;
     expected = subtasks.length;
     done = 0;
@@ -151,7 +158,6 @@ const Pipeline = (() => {
     });
     el.researcherCount.className = "chip chip-accent ml-auto";
     el.researcherCount.textContent = `${subtasks.length} running`;
-    if (complexity) log(`Planner: ${complexity}`);
     subtasks.forEach((s) => log(`Planned: ${s}`));
   }
 

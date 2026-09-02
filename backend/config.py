@@ -40,6 +40,11 @@ RAG_MIN_HITS = int(os.getenv("RAG_MIN_HITS", "2"))
 # Ceiling on the critic's inner tool loop, per review round.
 MAX_CRITIC_TOOL_CALLS = int(os.getenv("MAX_CRITIC_TOOL_CALLS", "5"))
 
+# Minimum gap between two chat calls, enforced across the whole graph. The free
+# tier limits requests per minute as well as per day, and a fanned-out round
+# would otherwise fire five calls at once. Set to 0 to disable.
+LLM_MIN_INTERVAL_SECONDS = float(os.getenv("LLM_MIN_INTERVAL_SECONDS", "2.0"))
+
 CHROMA_DIR = PROJECT_ROOT / "data" / "chroma"
 
 FRONTEND_DIR = PROJECT_ROOT / "frontend"

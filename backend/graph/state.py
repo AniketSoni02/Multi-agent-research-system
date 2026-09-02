@@ -38,10 +38,13 @@ class ResearchState(TypedDict, total=False):
     mode: str
     route_reason: str
 
+    # The router's scope judgement: 0 means direct, 1-5 seeds the planner with
+    # that many subtasks, None means the planner judges scope for itself.
+    complexity: Optional[int]
+
     # Rewritten by the planner on every round. On a loop-back these are the
     # gap-focused follow-ups, not a repeat of the first round's subtasks.
     subtasks: List[str]
-    complexity: str
 
     iteration: int
     max_iterations: int
@@ -93,8 +96,8 @@ def initial_state(session_id: str, topic: str, max_iterations: int) -> ResearchS
         "topic": topic,
         "mode": "",
         "route_reason": "",
+        "complexity": None,
         "subtasks": [],
-        "complexity": "",
         "iteration": 0,
         "max_iterations": max_iterations,
         "researcher_findings": [],

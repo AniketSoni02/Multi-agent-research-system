@@ -1,27 +1,44 @@
-"""Fakes that let the whole graph run without touching the Gemini API."""
+"""Fakes that let the whole graph run without touching the Gemini API.
 
-import asyncio
+Only get_llm is replaced. The real ask() and call() still run, so the throttle
+chokepoint every node goes through is exercised rather than stubbed out -- with
+the interval set to zero so the suite stays fast.
+"""
+
 from typing import Any, Dict, List
 
 import pytest
 from langchain_core.messages import AIMessage
 
+from backend import config
 from backend.graph.nodes import common, critic, research, routing
 
-# The node modules import get_llm and ask by name, so each one holds its own
-# reference and has to be patched individually.
+# The node modules import get_llm by name, so each holds its own reference and
+# has to be patched individually.
 _LLM_MODULES = (common, routing, research, critic)
-_ASK_MODULES = (common, routing, research)
+
+
+def _as_text(payload) -> str:
+    """Flatten whatever was handed to the model into something assertable."""
+    if isinstance(payload, str):
+        return payload
+    if isinstance(payload, list):
+        return "\n".join(_as_text(p) for p in payload)
+    content = getattr(payload, "content", None)
+    return content if isinstance(content, str) else str(payload)
 
 
 class FakeStructured:
     """Stands in for llm.with_structured_output(Schema)."""
 
-    def __init__(self, schema, replies):
+    def __init__(self, schema, replies, owner):
         self.schema = schema
         self.replies = replies
+        self.owner = owner
 
-    async def ainvoke(self, _prompt, **_kwargs):
+    async def ainvoke(self, prompt, **_kwargs):
+        self.owner.prompts.append(_as_text(prompt))
+        self.owner.calls += 1
         name = self.schema.__name__
         if name not in self.replies:
             raise AssertionError(f"no scripted {name} reply")
@@ -34,12 +51,13 @@ class FakeStructured:
 class FakeBound:
     """Stands in for llm.bind_tools([...])."""
 
-    def __init__(self, turns, calls_seen):
+    def __init__(self, turns, owner):
         self.turns = turns
-        self.calls_seen = calls_seen
+        self.owner = owner
 
     async def ainvoke(self, messages, **_kwargs):
-        self.calls_seen.append(messages)
+        self.owner.bound_calls.append(messages)
+        self.owner.calls += 1
         return self.turns.pop(0) if len(self.turns) > 1 else self.turns[0]
 
 
@@ -49,16 +67,20 @@ class FakeLLM:
         self.tool_turns = tool_turns or [AIMessage(content="done reviewing")]
         self.text = text
         self.bound_calls: List[Any] = []
-        self.prompts: List[Any] = []
+        self.prompts: List[str] = []
+        # Every path through the fake increments this, so a test can assert a
+        # query cost zero API calls.
+        self.calls = 0
 
     def with_structured_output(self, schema):
-        return FakeStructured(schema, self.structured)
+        return FakeStructured(schema, self.structured, self)
 
     def bind_tools(self, _schemas):
-        return FakeBound(self.tool_turns, self.bound_calls)
+        return FakeBound(self.tool_turns, self)
 
     async def ainvoke(self, messages, **_kwargs):
-        self.prompts.append(messages)
+        self.prompts.append(_as_text(messages))
+        self.calls += 1
         return AIMessage(content=self.text)
 
 
@@ -71,15 +93,10 @@ def fake_llm(monkeypatch):
     def install(**kwargs):
         llm = FakeLLM(**kwargs)
         holder["llm"] = llm
+        # The throttle is real; a 2s gap per call would make the suite crawl.
+        monkeypatch.setattr(config, "LLM_MIN_INTERVAL_SECONDS", 0)
         for module in _LLM_MODULES:
             monkeypatch.setattr(module, "get_llm", lambda: llm, raising=False)
-
-        async def fake_ask(prompt):
-            llm.prompts.append(prompt)
-            return llm.text
-
-        for module in _ASK_MODULES:
-            monkeypatch.setattr(module, "ask", fake_ask, raising=False)
         return llm
 
     return install

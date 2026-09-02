@@ -1,25 +1,30 @@
 """Prompt templates, one section per node."""
 
-ROUTER = """You are the Router at the front of a multi-agent research system. Decide whether
-this query needs the full research pipeline or just a direct answer.
+ROUTER = """You are the Router at the front of a multi-agent research system. Score how much
+work this query actually deserves, from 0 to {hi}.
 
 Query:
 {topic}
 
-Choose "direct" when a single well-informed paragraph or two would fully satisfy the asker:
+Score 0 when a single well-informed paragraph or two would fully satisfy the asker:
 greetings and chit-chat, definitions, arithmetic, translations, a single settled fact, an
 explanation of a stable concept, or anything answerable from general knowledge without
-needing to cite current sources.
+needing to cite current sources. A score of 0 skips the research pipeline entirely and the
+question is answered in one step.
 
-Choose "research" when a good answer needs gathering and reconciling several sources:
-comparisons, "state of the art" or "latest" questions, anything about recent or changing
-events, controversies with more than one defensible position, questions spanning several
-distinct sub-areas, or anything where the asker would reasonably expect citations.
+Score 1 to {hi} when a good answer needs gathering and reconciling sources, and let the
+number say how many distinct angles a researcher would have to cover:
+- 1 or 2 -- a narrow question that mostly needs sourcing or a couple of specifics
+- 3 -- a topic with a few genuinely distinct facets
+- 4 or {hi} -- a broad, comparative or contested topic
 
-When the query is genuinely borderline, choose "research" -- an over-researched answer is a
-cost, an under-researched one is a defect.
+Do not inflate the number: every point above 0 costs a full researcher. But do not score 0
+for anything where the asker would reasonably expect citations, anything about recent or
+changing events, or anything with more than one defensible position -- when the query is
+genuinely borderline, prefer research. An over-researched answer is a cost, an
+under-researched one is a defect.
 
-Give a one-sentence reason for the choice."""
+Give a one-sentence reason for the score."""
 
 
 DIRECT_ANSWER = """Answer this question directly and well.
@@ -54,6 +59,24 @@ Each subtask must:
   from the answers alone
 
 Also state, in one line, why the topic warrants the number of subtasks you chose."""
+
+
+PLANNER_SEEDED = """You are the Planner in a multi-agent research system.
+
+Research topic:
+{topic}
+
+The scope of this topic has already been judged: it needs exactly {n} research subtask{s}.
+That judgement was: {reason}
+
+Write exactly {n} subtask{s}. Do not add more, and do not merge them into fewer.
+
+Each subtask must:
+- cover a distinct angle, with no overlap between subtasks
+- be phrased as a self-contained question or investigation brief that a researcher
+  can act on without seeing the others
+- together, span the topic well enough that a thorough report could be written
+  from the answers alone"""
 
 
 PLANNER_GAP_ROUND = """You are the Planner in a multi-agent research system. A draft report

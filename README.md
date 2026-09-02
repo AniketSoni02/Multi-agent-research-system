@@ -104,10 +104,12 @@ same-origin with the API — no CORS setup, and `EventSource` works.
 .venv/Scripts/python.exe -m pytest
 ```
 
-49 tests, no network and no API calls: the LLM is faked out via the `fake_llm` fixture in
-`tests/conftest.py`. `tests/test_graph.py` drives the whole compiled graph, which is what
-actually covers the topology — the fan-out and its join, the Critic's inner tool loop and
-its cap, and the outer review loop back to the Planner.
+99 tests, no network and no API calls: only `get_llm` is faked, via the `fake_llm` fixture in
+`tests/conftest.py`, so the real `ask()`/`call()` chokepoint is exercised rather than stubbed.
+`tests/test_graph.py` drives the whole compiled graph, which is what actually covers the
+topology — the fan-out and its join, the Critic's inner tool loop and its cap, and the outer
+review loop back to the Planner. It also asserts that "what is the capital of france" costs
+exactly **one** LLM call end to end.
 
 ## How it works
 
@@ -137,11 +139,25 @@ and `app.js` handles the form and the report.
 ### The router
 
 Every query used to pay for the full pipeline — five researchers, up to three review rounds,
-several minutes. The Router spends one structured call deciding whether that is warranted.
-"What does CPU stand for" gets one answer; "compare the leading approaches to X" gets the
-research path. Borderline questions go to research, and if the Router itself fails the graph
-defaults to research: an over-researched answer is a cost, an under-researched one is a
-defect.
+several minutes. The Router runs first and scores how much work the query deserves, on a
+0–5 scale: **0 answers it directly**, and 1–5 is how many researchers the Planner should fan
+out to.
+
+Most queries never reach the API to be routed. `backend/graph/complexity.py` settles the
+unambiguous ones for free — "what is the capital of france" is `direct`, "compare solar and
+wind power" is `research` — so a simple question costs exactly **one** LLM call in total, the
+answer itself. Only genuinely ambiguous queries spend a call on the score.
+
+The ordering inside the classifier is the safety property: research markers are checked
+first, so "what is the *current* capital of X" hits the recency rule and never reaches the
+capital-of pattern. Two interrogatives means two questions, and a compound query goes to
+research even when its first half looks settled. The direct list stays deliberately narrow —
+an over-researched answer is a cost, an under-researched one is a defect — and anything the
+heuristic cannot place is handed to the model, falling back to research if that call fails.
+
+This matters more than it looks: routing used to depend on an API call, so when the daily
+quota ran out the Router failed, defaulted to research, and sent every simple question
+through the whole pipeline. Now the decision costs nothing and holds regardless.
 
 ### The researchers and the knowledge base
 
@@ -202,6 +218,7 @@ All optional, via `.env`:
 | `MAX_ITERATIONS` | `3` | Critic rounds before forced finalization. |
 | `MAX_SUBTASKS` | `5` | Ceiling on the Planner's fan-out. |
 | `MAX_CRITIC_TOOL_CALLS` | `5` | Ceiling on the Critic's tool loop, per round. |
+| `LLM_MIN_INTERVAL_SECONDS` | `2.0` | Minimum gap between two chat calls, graph-wide. `0` disables it. |
 | `RAG_K` | `4` | Chunks retrieved per subtask. |
 | `RAG_MIN_HITS` | `2` | Below this, the researcher falls back to web search. |
 | `WEB_RESULTS_PER_SUBTASK` | `5` | Web results per researcher. |
@@ -213,8 +230,16 @@ test rather than assuming a newer ID resolves, and check `/api/health` if in dou
 
 **Free-tier quota.** `gemini-3.6-flash` allows 20 `generate_content` requests per day on the
 free tier. One research run costs roughly 10–25 calls, so a single full run can exhaust the
-day's quota. Embeddings are metered separately and are not affected. On exhaustion the run
-surfaces a `429 RESOURCE_EXHAUSTED` error event rather than hanging.
+day's quota — a simple question, by contrast, costs one. Embeddings are metered separately
+and are not affected. On exhaustion the run surfaces a `429 RESOURCE_EXHAUSTED` error event
+rather than hanging.
+
+Every chat call in the graph is spaced at least `LLM_MIN_INTERVAL_SECONDS` apart by a shared
+throttle in `graph/nodes/common.py`, which also covers the per-minute rate limit: a five-way
+researcher fan-out is staggered rather than firing at once. The cost is latency proportional
+to call count — roughly 30s added to a 15-call research run — and the direct path, being one
+call, is unaffected. Nodes must invoke the model through `common.call()`; a direct
+`runnable.ainvoke()` escapes the throttle.
 
 ## API
 

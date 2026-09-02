@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from backend import config
 from backend.graph import prompts
-from backend.graph.nodes.common import get_llm
+from backend.graph.nodes.common import call, get_llm
 from backend.graph.state import ResearchState, ToolEvidence
 from backend.tools import critic_tools
 
@@ -68,8 +68,7 @@ async def critic_node(state: ResearchState) -> dict:
             ),
         ]
 
-    critic = get_llm().bind_tools(critic_tools.TOOL_SCHEMAS)
-    reply = await critic.ainvoke(messages)
+    reply = await call(get_llm().bind_tools(critic_tools.TOOL_SCHEMAS), messages)
     messages.append(reply)
 
     calls = getattr(reply, "tool_calls", []) or []
@@ -200,7 +199,8 @@ async def verdict_node(state: ResearchState) -> dict:
     verdict_llm = get_llm().with_structured_output(CriticVerdict)
 
     try:
-        result: CriticVerdict = await verdict_llm.ainvoke(
+        result: CriticVerdict = await call(
+            verdict_llm,
             prompts.VERDICT.format(
                 topic=state["topic"],
                 subtasks=_subtask_list(state),
@@ -208,7 +208,7 @@ async def verdict_node(state: ResearchState) -> dict:
                 evidence=state.get("evidence_summary", "") or "(none)",
                 iteration=iteration,
                 max_iterations=state.get("max_iterations", config.MAX_ITERATIONS),
-            )
+            ),
         )
     except Exception as exc:
         # Approving on a failed verdict call would ship an unreviewed report;

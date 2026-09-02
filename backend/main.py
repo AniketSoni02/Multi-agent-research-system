@@ -112,5 +112,23 @@ async def http_exception_handler(request, exc: HTTPException):
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 
+class RevalidatingStaticFiles(StaticFiles):
+    """Serve the frontend with no-cache so the browser always revalidates.
+
+    StaticFiles sends an ETag but no Cache-Control, which lets browsers apply
+    heuristic caching and serve a stale bundle without asking. That is how a
+    frontend change can silently not appear -- an old sse-client.js has no
+    handler for a newly added node and drops its events on the floor. The ETag
+    still makes revalidation cheap: unchanged files come back as a 304.
+    """
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 # Mounted last so it cannot shadow the /api routes above.
-app.mount("/", StaticFiles(directory=str(config.FRONTEND_DIR), html=True), name="frontend")
+app.mount(
+    "/", RevalidatingStaticFiles(directory=str(config.FRONTEND_DIR), html=True), name="frontend"
+)
