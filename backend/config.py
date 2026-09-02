@@ -13,9 +13,11 @@ load_dotenv(PROJECT_ROOT / ".env")
 # around the "=" is also tolerated, so a stray space in .env does not break auth.
 GEMINI_API_KEY = (os.getenv("GEMINI_API_KEY") or "").strip().strip('"').strip("'")
 
-# Model ID verified working against this key. gemini-2.0/2.5-flash are NOT
-# available to it, so do not "modernize" this back.
-CHAT_MODEL = os.getenv("CHAT_MODEL", "gemini-3.6-flash")
+# Model ID verified against this key by backend/scripts/smoke_test.py, on all
+# three paths the graph needs: chat, structured output and tool calling. Not
+# every advertised model is reachable here, so probe before swapping this --
+# `client.models.list()` shows what the key actually offers.
+CHAT_MODEL = os.getenv("CHAT_MODEL", "gemini-3.5-flash-lite")
 
 # How many planner -> researchers -> synthesizer -> critic rounds are allowed
 # before the report is finalized regardless of the critic's verdict.

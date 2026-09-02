@@ -204,7 +204,7 @@ All optional, via `.env`:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `CHAT_MODEL` | `gemini-3.6-flash` | Chat model for every agent. |
+| `CHAT_MODEL` | `gemini-3.5-flash-lite` | Chat model for every agent. |
 | `MAX_ITERATIONS` | `3` | Critic rounds before forced finalization. |
 | `MAX_SUBTASKS` | `5` | Ceiling on the Planner's fan-out. |
 | `MAX_CRITIC_TOOL_CALLS` | `5` | Ceiling on the Critic's tool loop, per round. |
@@ -212,13 +212,25 @@ All optional, via `.env`:
 | `WEB_RESULTS_PER_SUBTASK` | `5` | Web results per researcher. |
 | `FORCE_CRITIC_REJECT_ONCE` | unset | Set to `1` to force a round-1 rejection and exercise the loop-back path. |
 
-The model ID is not arbitrary: `gemini-2.0-flash` and `gemini-2.5-flash` both 404 for this
-API key. Re-run the smoke test rather than assuming a newer ID resolves, and check
-`/api/health` if in doubt.
+Do not assume a model ID resolves just because it is documented — not every advertised
+model is reachable on a given key. Ask the key what it offers, then verify the three paths
+the graph actually needs:
 
-**Free-tier quota.** `gemini-3.6-flash` allows 20 `generate_content` requests per day on the
-free tier. One research run costs roughly 10–25 calls, so a single full run can exhaust the
-day's quota — a simple question, by contrast, costs one. On exhaustion the run surfaces a
+```python
+from google import genai
+for m in genai.Client(api_key=KEY).models.list():
+    print(m.name)
+```
+
+`smoke_test.py` then checks chat, structured output and **tool calling** against whatever
+`CHAT_MODEL` is set to. Tool calling is the one to watch: the Critic's evidence loop is dead
+without it, and that failure is quiet — the critic simply returns no tool calls and the
+verdict judges an empty evidence set.
+
+**Free-tier quota.** Quota is metered **per model**, so switching `CHAT_MODEL` gets a fresh
+budget. The limit is not uniform: `gemini-3.6-flash` allowed only 20 `generate_content`
+requests per day, which one research run (roughly 10–25 calls) could exhaust on its own — a
+simple question, by contrast, costs one. On exhaustion the run surfaces a
 `429 RESOURCE_EXHAUSTED` error event rather than hanging.
 
 Every chat call in the graph is spaced at least `LLM_MIN_INTERVAL_SECONDS` apart by a shared
