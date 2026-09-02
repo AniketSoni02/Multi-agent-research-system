@@ -500,22 +500,6 @@ body {
   background: var(--text-muted);
 }
 
-.spinner {
-  width: 14px;
-  height: 14px;
-  border-radius: 9999px;
-  border: 2px solid rgba(191, 219, 254, 0.2);
-  border-top-color: var(--accent);
-  animation: spin 0.7s linear infinite;
-  flex: none;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 @keyframes pulse {
   0%,
   100% {

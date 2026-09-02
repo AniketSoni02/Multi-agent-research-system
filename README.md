@@ -129,6 +129,10 @@ All nodes are async — `Send()` branches only run concurrently if their bodies 
 `sse-client.js` consumes the event stream, `history.js` is the navbar session history,
 and `app.js` handles the form and the report.
 
+The stepper is deliberately minimal: each card is a node's name, and the dot and border
+carry its state (idle, active, complete, skipped, error). No per-node detail and no activity
+log — the substance of a run is the report itself.
+
 ### The router
 
 Every query used to pay for the full pipeline — five researchers, up to three review rounds,

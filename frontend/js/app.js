@@ -162,7 +162,6 @@
     autosizeTopic();
     setRunning(false);
     Pipeline.reset();
-    Pipeline.log("New session started");
   });
 
   /* ---------------------------------------------------------------- history */
@@ -185,10 +184,8 @@
       const approved =
         record.approved === undefined ? !record.report.startsWith(">") : record.approved;
       showReport(record.report, approved, true);
-      Pipeline.log(`Loaded from history: ${currentTopic}`);
     } else {
       el.reportSection.classList.add("hidden");
-      Pipeline.log(`Loaded from history (no report was saved): ${currentTopic}`, "warning");
     }
   }
 

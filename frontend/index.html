@@ -143,16 +143,16 @@
             </div>
           </div>
 
+          <!-- Each card is the node's name and its state. The dot and border
+               carry the progress; there is deliberately no detail text. -->
           <div class="scroll-x">
-            <div class="flex min-w-[900px] items-stretch gap-3">
-              <div class="w-[170px] flex-none">
+            <div class="flex items-stretch gap-3">
+              <div class="flex-1">
                 <div class="stage h-full" id="stage-router" data-state="idle">
                   <div class="flex items-center gap-2">
                     <span class="stage-dot"></span>
                     <span class="label-md text-[15px]">Router</span>
                   </div>
-                  <p class="mt-1 body-md text-text-muted">Direct or research</p>
-                  <p class="mt-2 body-md text-text-secondary" id="router-detail">Waiting</p>
                 </div>
               </div>
 
@@ -160,14 +160,12 @@
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 12h14m-5-5 5 5-5 5" /></svg>
               </div>
 
-              <div class="w-[190px] flex-none">
+              <div class="flex-1">
                 <div class="stage h-full" id="stage-planner" data-state="idle">
                   <div class="flex items-center gap-2">
                     <span class="stage-dot"></span>
                     <span class="label-md text-[15px]">Planner</span>
                   </div>
-                  <p class="mt-1 body-md text-text-muted">Judges scope, splits it</p>
-                  <p class="mt-2 body-md text-text-secondary" id="planner-detail">Waiting</p>
                 </div>
               </div>
 
@@ -175,16 +173,11 @@
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 12h14m-5-5 5 5-5 5" /></svg>
               </div>
 
-              <div class="min-w-[260px] flex-1">
+              <div class="flex-1">
                 <div class="stage h-full" id="stage-researcher" data-state="idle">
                   <div class="flex items-center gap-2">
                     <span class="stage-dot"></span>
                     <span class="label-md text-[15px]">Researchers</span>
-                    <span class="chip chip-neutral ml-auto" id="researcher-count">0 running</span>
-                  </div>
-                  <p class="mt-1 body-md text-text-muted">Web search, in parallel</p>
-                  <div class="mt-2 flex flex-col gap-1.5" id="subtask-list">
-                    <p class="body-md text-text-secondary">Waiting</p>
                   </div>
                 </div>
               </div>
@@ -193,14 +186,12 @@
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 12h14m-5-5 5 5-5 5" /></svg>
               </div>
 
-              <div class="w-[190px] flex-none">
+              <div class="flex-1">
                 <div class="stage h-full" id="stage-synthesizer" data-state="idle">
                   <div class="flex items-center gap-2">
                     <span class="stage-dot"></span>
                     <span class="label-md text-[15px]">Synthesizer</span>
                   </div>
-                  <p class="mt-1 body-md text-text-muted">Merges findings</p>
-                  <p class="mt-2 body-md text-text-secondary" id="synthesizer-detail">Waiting</p>
                 </div>
               </div>
 
@@ -208,29 +199,16 @@
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 12h14m-5-5 5 5-5 5" /></svg>
               </div>
 
-              <div class="min-w-[240px] flex-1">
+              <div class="flex-1">
                 <div class="stage h-full" id="stage-critic" data-state="idle">
                   <div class="flex items-center gap-2">
                     <span class="stage-dot"></span>
                     <span class="label-md text-[15px]">Critic</span>
-                    <span class="chip chip-neutral ml-auto" id="critic-tool-count">0 checks</span>
                   </div>
-                  <p class="mt-1 body-md text-text-muted">Gathers evidence, then judges</p>
-                  <div class="mt-2 flex flex-col gap-1.5" id="critic-tool-list"></div>
-                  <p class="mt-2 body-md text-text-secondary" id="critic-detail">Waiting</p>
                 </div>
               </div>
             </div>
           </div>
-
-          <div id="loopback-note" class="mt-4 hidden items-center gap-2 rounded-control bg-warning/10 px-3 py-2">
-            <span class="chip chip-neutral" style="background: rgba(223, 174, 82, 0.14); color: #dfae52">
-              Gaps found
-            </span>
-            <span class="body-md text-text-secondary" id="loopback-text"></span>
-          </div>
-
-          <div id="activity-log" class="mt-5 flex max-h-[180px] flex-col gap-1 overflow-y-auto"></div>
         </div>
       </section>
 
