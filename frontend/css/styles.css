@@ -1,0 +1,641 @@
+/* Liquid Blue Glass — component recipes from design.md that Tailwind utilities
+   express badly (backdrop-filter stacks, multi-layer shadows). Tokens live in the
+   Tailwind config inside index.html; anything reused across both lives here. */
+
+:root {
+  --background: #08090c;
+  --surface: #0d1016;
+  --surface-secondary: #11151d;
+  --text-primary: #f4f6fa;
+  --text-secondary: #a0a7b4;
+  --text-muted: #6f7785;
+  --accent: #4f8fff;
+  --border: #bfdcff;
+  --success: #50c58d;
+  --warning: #dfae52;
+  --danger: #e05d66;
+
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 120ms;
+  --dur-standard: 200ms;
+  --dur-overlay: 260ms;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--background);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+  /* The system's only background pattern: a barely-visible 1px technical grid. */
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.01) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.01) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* --- glass card ------------------------------------------------------------ */
+
+.glass-card {
+  position: relative;
+  background: transparent;
+  backdrop-filter: blur(18px) saturate(1.05);
+  -webkit-backdrop-filter: blur(18px) saturate(1.05);
+  border-radius: 28px;
+  padding: 32px;
+  box-shadow:
+    rgba(255, 255, 255, 0.043) 0 1px 0 0 inset,
+    rgba(0, 0, 0, 0.18) 0 16px 48px 0;
+}
+
+/* Elevation comes from blur, not opacity — but a hairline keeps edges legible
+   against the near-black canvas. */
+.glass-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid rgba(191, 219, 254, 0.08);
+  pointer-events: none;
+}
+
+/* --- typography scale ------------------------------------------------------ */
+
+.display-lg {
+  font-size: 40px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -1.8px;
+}
+
+.headline-md {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.label-md {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.56;
+}
+
+.body-md {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.33;
+}
+
+.eyebrow {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* --- buttons --------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color var(--dur-standard) var(--ease-standard),
+    box-shadow var(--dur-standard) var(--ease-standard),
+    background-color var(--dur-standard) var(--ease-standard);
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn:disabled:active {
+  transform: none;
+}
+
+.btn-primary {
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 9999px;
+  background: rgba(96, 165, 250, 0.09);
+  border: 1px solid rgba(191, 219, 254, 0.24);
+  color: var(--text-primary);
+  box-shadow: rgba(74, 144, 255, 0.075) 0 0 24px 0;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: rgba(96, 165, 250, 0.16);
+  border-color: rgba(191, 219, 254, 0.4);
+}
+
+.btn-secondary {
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 9999px;
+  background: rgba(96, 165, 250, 0.07);
+  border: 1px solid rgba(191, 219, 254, 0.14);
+  color: var(--text-primary);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  border-color: rgba(191, 219, 254, 0.28);
+}
+
+.btn-ghost {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: none;
+  color: var(--text-primary);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* --- form field ------------------------------------------------------------ */
+
+.field {
+  width: 100%;
+  background: var(--surface-secondary);
+  border: 1px solid rgba(191, 219, 254, 0.12);
+  border-radius: 12px;
+  color: var(--text-primary);
+  padding: 12px 14px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  transition: border-color var(--dur-standard) var(--ease-standard),
+    box-shadow var(--dur-standard) var(--ease-standard);
+}
+
+/* JS sets the height from the content, so the user must not fight it with the
+   native grab handle. min-height keeps the empty field from collapsing to one row. */
+.field-autogrow {
+  resize: none;
+  min-height: 84px;
+  overflow-y: hidden;
+}
+
+.field::placeholder {
+  color: var(--text-muted);
+}
+
+.field:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(79, 143, 255, 0.22);
+}
+
+/* --- session history popover ----------------------------------------------- */
+
+.history-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9999px;
+  background: rgba(96, 165, 250, 0.18);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+
+/* Anchored to the navbar button, above the sticky header's own stacking. */
+.history-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  width: min(360px, calc(100vw - 32px));
+  padding: 8px;
+  border-radius: 18px;
+  background: rgba(13, 16, 22, 0.92);
+  backdrop-filter: blur(28px) saturate(1.05);
+  -webkit-backdrop-filter: blur(28px) saturate(1.05);
+  border: 1px solid rgba(191, 219, 254, 0.12);
+  box-shadow: rgba(0, 0, 0, 0.45) 0 18px 48px 0;
+}
+
+.history-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--surface-secondary);
+}
+
+.history-search-row input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.history-search-row input::placeholder {
+  color: var(--text-muted);
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: min(320px, 50vh);
+  overflow-y: auto;
+}
+
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 8px;
+  border-radius: 10px;
+  transition: background-color var(--dur-fast) var(--ease-standard);
+}
+
+.history-row:hover,
+.history-row:focus-within {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.history-row[data-current="true"] {
+  background: rgba(79, 143, 255, 0.12);
+}
+
+.history-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* At rest a title is quiet; the hovered row is the one that reads as active. */
+.history-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color var(--dur-fast) var(--ease-standard);
+}
+
+.history-row:hover .history-title,
+.history-row:focus-within .history-title,
+.history-row[data-current="true"] .history-title {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* One grid cell holding both the age and the buttons, so the row cross-fades
+   between them without the title shifting. */
+.history-meta {
+  flex: none;
+  display: grid;
+  align-items: center;
+  justify-items: end;
+  min-width: 52px;
+  height: 26px;
+}
+
+.history-time,
+.history-actions {
+  grid-area: 1 / 1;
+  transition: opacity var(--dur-fast) var(--ease-standard);
+}
+
+.history-time {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.history-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.history-row:hover .history-time,
+.history-row:focus-within .history-time {
+  opacity: 0;
+}
+
+.history-row:hover .history-actions,
+.history-row:focus-within .history-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.history-action {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard);
+}
+
+.history-action:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+.history-action-danger:hover {
+  background: rgba(224, 93, 102, 0.16);
+  color: var(--danger);
+}
+
+.history-rename-input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 10px;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.history-empty {
+  padding: 18px 12px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* --- chips ----------------------------------------------------------------- */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 9999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.chip-neutral {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+}
+
+.chip-accent {
+  background: rgba(79, 143, 255, 0.14);
+  color: var(--accent);
+}
+
+.chip-success {
+  background: rgba(80, 197, 141, 0.14);
+  color: var(--success);
+}
+
+.chip-danger {
+  background: rgba(224, 93, 102, 0.14);
+  color: var(--danger);
+}
+
+/* --- pipeline stepper ------------------------------------------------------ */
+
+.stage {
+  border-radius: 12px;
+  border: 1px solid rgba(191, 219, 254, 0.1);
+  background: var(--surface-secondary);
+  padding: 14px 16px;
+  transition: border-color var(--dur-standard) var(--ease-standard),
+    box-shadow var(--dur-standard) var(--ease-standard),
+    opacity var(--dur-standard) var(--ease-standard);
+  opacity: 0.45;
+}
+
+.stage[data-state="active"] {
+  opacity: 1;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(79, 143, 255, 0.14);
+}
+
+.stage[data-state="complete"] {
+  opacity: 1;
+  border-color: rgba(80, 197, 141, 0.5);
+  background: rgba(80, 197, 141, 0.06);
+}
+
+.stage[data-state="error"] {
+  opacity: 1;
+  border-color: var(--danger);
+  background: rgba(224, 93, 102, 0.06);
+}
+
+.stage-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--text-muted);
+  flex: none;
+}
+
+.stage[data-state="active"] .stage-dot {
+  background: var(--accent);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.stage[data-state="complete"] .stage-dot {
+  background: var(--success);
+}
+
+.stage[data-state="error"] .stage-dot {
+  background: var(--danger);
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  border: 2px solid rgba(191, 219, 254, 0.2);
+  border-top-color: var(--accent);
+  animation: spin 0.7s linear infinite;
+  flex: none;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* --- rendered report ------------------------------------------------------- */
+
+.report h1 {
+  font-size: 40px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -1.8px;
+  margin: 0 0 20px;
+}
+
+.report h2 {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 32px 0 12px;
+}
+
+.report h3 {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.56;
+  margin: 24px 0 8px;
+}
+
+.report p,
+.report li {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.report p {
+  margin: 0 0 12px;
+}
+
+.report ul,
+.report ol {
+  margin: 0 0 12px;
+  padding-left: 20px;
+}
+
+.report ul {
+  list-style: disc;
+}
+
+.report ol {
+  list-style: decimal;
+}
+
+.report li {
+  margin-bottom: 6px;
+}
+
+.report a {
+  color: var(--accent);
+  text-decoration: none;
+  word-break: break-word;
+}
+
+.report a:hover {
+  text-decoration: underline;
+}
+
+.report code {
+  background: var(--surface-secondary);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 13px;
+}
+
+.report pre {
+  background: var(--surface-secondary);
+  border-radius: 12px;
+  padding: 16px;
+  overflow-x: auto;
+  margin: 0 0 12px;
+}
+
+.report blockquote {
+  border-left: 2px solid rgba(191, 219, 254, 0.24);
+  padding-left: 16px;
+  margin: 0 0 16px;
+  color: var(--text-secondary);
+}
+
+.report table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 16px;
+}
+
+.report th,
+.report td {
+  border: 1px solid rgba(191, 219, 254, 0.12);
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 14px;
+}
+
+.report th {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.report td {
+  color: var(--text-secondary);
+}
+
+/* Any wide block scrolls inside itself rather than the page. */
+.scroll-x {
+  overflow-x: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .btn:active {
+    transform: none;
+  }
+}
