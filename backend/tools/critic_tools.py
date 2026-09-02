@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from backend import config
 from backend.graph import prompts
 from backend.graph.state import Finding
-from backend.tools import retriever, web_search
+from backend.tools import web_search
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ class CheckCoverage(BaseModel):
 
 
 class VerifyClaim(BaseModel):
-    """Look a factual claim up in the session's knowledge base, falling back to web search."""
+    """Look a factual claim up with a fresh web search."""
 
     claim: str = Field(description="The specific factual claim to look up, stated in full.")
 
@@ -51,25 +51,17 @@ async def check_coverage(subtask: str, draft_report: str) -> str:
     )
 
 
-async def verify_claim(claim: str, session_id: str) -> str:
-    """Retrieval only, deliberately: no LLM sits between the sources and the verdict.
+async def verify_claim(claim: str) -> str:
+    """Search only, deliberately: no LLM sits between the sources and the verdict.
 
-    The knowledge base holds the researchers' own briefings, so this checks a
-    claim against what the run actually established before spending a web search
-    on it.
+    This is the critic's one source of outside evidence -- check_coverage and
+    check_grounding both judge the draft against material the run produced
+    itself, so without this the loop would never look beyond its own output.
     """
-    docs = await retriever.retrieve_async(session_id, claim, k=config.RAG_K)
-    if docs:
-        block, _ = retriever.format_documents(docs)
-        return f"Knowledge base evidence for {claim!r}:\n{block}"
-
     results = await web_search.search_async(claim, config.WEB_RESULTS_PER_SUBTASK)
     if not results:
-        return (
-            f"No evidence found for {claim!r}: the knowledge base has nothing on it and "
-            "web search returned no results."
-        )
-    return f"Web evidence for {claim!r} (knowledge base had nothing):\n{web_search.format_results(results)}"
+        return f"No evidence found for {claim!r}: web search returned no results."
+    return f"Web evidence for {claim!r}:\n{web_search.format_results(results)}"
 
 
 async def check_grounding(statement: str, findings: List[Finding]) -> str:

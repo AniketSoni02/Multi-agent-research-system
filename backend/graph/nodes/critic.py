@@ -104,7 +104,7 @@ async def _dispatch(name: str, args: Dict[str, Any], state: ResearchState) -> st
             args.get("subtask", ""), state.get("draft_report", "")
         )
     if name == "VerifyClaim":
-        return await critic_tools.verify_claim(args.get("claim", ""), state["session_id"])
+        return await critic_tools.verify_claim(args.get("claim", ""))
     if name == "CheckGrounding":
         return await critic_tools.check_grounding(
             args.get("statement", ""), state.get("researcher_findings", [])

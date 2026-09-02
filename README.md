@@ -4,8 +4,8 @@ A multi-agent research and report system built on LangGraph, FastAPI and Gemini.
 
 Give it a question. A **Router** first decides whether it needs research at all — a simple
 question gets one direct answer. Otherwise a **Planner** judges the topic's scope and splits
-it into 1–5 subtasks, **Researchers** work those in parallel against the session's knowledge
-base and live web search, a **Synthesizer** merges the findings into one report, and a
+it into 1–5 subtasks, **Researchers** work those in parallel against live web search, a
+**Synthesizer** merges the findings into one report, and a
 **Critic** gathers evidence with its own tools before deciding whether the report ships or
 goes back to the Planner for another round.
 
@@ -24,7 +24,7 @@ goes back to the Planner for another round.
              │            ▼         ▼         ▼                          │
              │      ┌──────────┐ ┌──────────┐ ┌──────────┐               │
              │      │Researcher│ │Researcher│ │  … ≤ 5   │               │
-             │      │ RAG →web │ │ RAG →web │ │          │               │
+             │      │   web    │ │   web    │ │          │               │
              │      └────┬─────┘ └────┬─────┘ └────┬─────┘               │
              │           └────────────┼────────────┘                     │
              │                        ▼  join, any N                     │
@@ -38,7 +38,7 @@ goes back to the Planner for another round.
              │                 └──────┬───────┘              │  ▼        │
              │                        │        ┌─────────────┴──────────┐│
              │                        │        │ check_coverage         ││
-             │                        │        │ verify_claim  (RAG+web)││
+             │                        │        │ verify_claim  (web)    ││
              │                        │        │ check_grounding        ││
              │                        │        └────────────────────────┘│
              │                        ▼                                  │
@@ -80,14 +80,8 @@ Verify the key works through LangChain before running the app:
 .venv/Scripts/python.exe -m backend.scripts.smoke_test
 ```
 
-That probes all four things the graph depends on: chat, structured output, **tool calling**
-(the Critic's loop cannot run without it), and **embeddings** (the RAG path cannot run
-without them). It walks a list of candidate embedding model IDs and tells you which one
-resolves. To round-trip the vector store against the real embedding API:
-
-```bash
-.venv/Scripts/python.exe -m backend.scripts.rag_check
-```
+That probes all three things the graph depends on: chat, structured output, **tool calling**
+(the Critic's loop cannot run without it).
 
 ## Run
 
@@ -124,7 +118,6 @@ exactly **one** LLM call end to end.
 | `graph/nodes/critic.py` | The critic's five-stage evidence loop. |
 | `graph/nodes/common.py` | Shared LLM client. `text_of` flattens Gemini 3.x content blocks — without it the block-list repr lands in the report. |
 | `graph/prompts.py` | One prompt per node, with separate first-round and gap-round variants for the Planner and Synthesizer. |
-| `tools/retriever.py` | Per-session Chroma store, embedded — no server, no Docker. |
 | `tools/critic_tools.py` | The three tools the Critic can call. |
 | `tools/web_search.py` | DuckDuckGo via `ddgs`, with retry/backoff. Returns `[]` rather than failing a run. |
 | `main.py` | SSE research stream and static frontend mount. |
@@ -159,19 +152,15 @@ This matters more than it looks: routing used to depend on an API call, so when 
 quota ran out the Router failed, defaulted to research, and sent every simple question
 through the whole pipeline. Now the decision costs nothing and holds regardless.
 
-### The researchers and the knowledge base
+### The researchers
 
-Each researcher tries the session's vector store first and only falls back to web search when
-the store returns fewer than `RAG_MIN_HITS` chunks. It then **writes its own briefing back**
-into the store. Round one therefore starts empty and searches the web; by round two the store
-holds round one's findings, so follow-up subtasks retrieve what the run already established
-instead of re-searching for it. The Critic's `verify_claim` tool reads the same store.
+Each researcher runs one web search for its own subtask and writes a briefing from the
+results, citing them inline as `[1]`, `[2]`, … Branches are independent: they share nothing
+but the topic, and their findings are merged only at the Synthesizer.
 
-Citations run continuously across both blocks — if two chunks come back from the store, the
-first web result is `[3]` — so the inline `[n]` markers in a briefing always resolve.
-
-Writes are serialized behind an `asyncio.Lock`: up to five branches finish at once, and
-Chroma's sqlite backend raises "database is locked" under concurrent writers.
+Search failure degrades rather than aborts. `tools/web_search.py` retries three times with
+exponential backoff and then returns `[]`; the researcher still writes a briefing, and the
+prompt tells it to say plainly what the sources did not answer rather than inventing it.
 
 ### The critic
 
@@ -179,8 +168,10 @@ The Critic does not judge from impression. It is a bounded tool loop — at most
 `MAX_CRITIC_TOOL_CALLS` (default 5) calls per review round — over three tools:
 
 - `check_coverage(subtask)` — does the draft actually address a planned subtask?
-- `verify_claim(claim)` — look the claim up in the knowledge base, falling back to web
-  search. Pure retrieval, no LLM: the verdict weighs raw sources, not a second opinion.
+- `verify_claim(claim)` — look the claim up with a fresh web search. Pure retrieval, no LLM:
+  the verdict weighs raw sources, not a second opinion. It is also the Critic's only source
+  of outside evidence — the other two judge the draft against material the run produced
+  itself, so without this the loop would never look beyond its own output.
 - `check_grounding(statement)` — does a statement in the draft trace back to what the
   researchers actually found, or was it invented in the write-up?
 
@@ -214,25 +205,21 @@ All optional, via `.env`:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `CHAT_MODEL` | `gemini-3.6-flash` | Chat model for every agent. |
-| `EMBED_MODEL` | `models/gemini-embedding-001` | Embeddings for the session vector store. |
 | `MAX_ITERATIONS` | `3` | Critic rounds before forced finalization. |
 | `MAX_SUBTASKS` | `5` | Ceiling on the Planner's fan-out. |
 | `MAX_CRITIC_TOOL_CALLS` | `5` | Ceiling on the Critic's tool loop, per round. |
 | `LLM_MIN_INTERVAL_SECONDS` | `2.0` | Minimum gap between two chat calls, graph-wide. `0` disables it. |
-| `RAG_K` | `4` | Chunks retrieved per subtask. |
-| `RAG_MIN_HITS` | `2` | Below this, the researcher falls back to web search. |
 | `WEB_RESULTS_PER_SUBTASK` | `5` | Web results per researcher. |
 | `FORCE_CRITIC_REJECT_ONCE` | unset | Set to `1` to force a round-1 rejection and exercise the loop-back path. |
 
-Neither model ID is arbitrary. `gemini-2.0-flash` and `gemini-2.5-flash` both 404 for this
-API key, and so do `models/text-embedding-004` and `models/embedding-001`. Re-run the smoke
-test rather than assuming a newer ID resolves, and check `/api/health` if in doubt.
+The model ID is not arbitrary: `gemini-2.0-flash` and `gemini-2.5-flash` both 404 for this
+API key. Re-run the smoke test rather than assuming a newer ID resolves, and check
+`/api/health` if in doubt.
 
 **Free-tier quota.** `gemini-3.6-flash` allows 20 `generate_content` requests per day on the
 free tier. One research run costs roughly 10–25 calls, so a single full run can exhaust the
-day's quota — a simple question, by contrast, costs one. Embeddings are metered separately
-and are not affected. On exhaustion the run surfaces a `429 RESOURCE_EXHAUSTED` error event
-rather than hanging.
+day's quota — a simple question, by contrast, costs one. On exhaustion the run surfaces a
+`429 RESOURCE_EXHAUSTED` error event rather than hanging.
 
 Every chat call in the graph is spaced at least `LLM_MIN_INTERVAL_SECONDS` apart by a shared
 throttle in `graph/nodes/common.py`, which also covers the per-minute rate limit: a five-way
@@ -245,7 +232,7 @@ call, is unaffected. Nodes must invoke the model through `common.call()`; a dire
 
 | Route | Purpose |
 | --- | --- |
-| `GET /api/health` | Configured models, limits, and whether the API key is present. |
+| `GET /api/health` | Configured model, limits, and whether the API key is present. |
 | `GET /api/research/stream?session_id=&topic=` | SSE stream, one event per completed node. |
 
 The stream emits `{"node": …, "output": …}` per node, bracketed by `{"event": "start"}`
@@ -257,6 +244,5 @@ The Critic's message transcript is stripped before encoding — it holds LangCha
 objects `json.dumps` cannot serialize, and the UI reads the tool calls from `tool_evidence`
 instead.
 
-Sessions are a client-generated UUID labelling a run. They now mean something server-side:
-the UUID names the Chroma collection the run reads and writes. There is still no auth and no
-database.
+Sessions are a client-generated UUID labelling a run — no auth, no database, and nothing
+persisted server-side. History lives in the browser's `localStorage`.

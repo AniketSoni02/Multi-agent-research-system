@@ -104,20 +104,12 @@ def fake_llm(monkeypatch):
 
 @pytest.fixture
 def no_network(monkeypatch):
-    """Silence the vector store and web search so nothing leaves the process."""
-    from backend.tools import retriever, web_search
-
-    async def no_docs(*_a, **_kw):
-        return []
+    """Silence web search so nothing leaves the process."""
+    from backend.tools import web_search
 
     async def no_results(*_a, **_kw):
         return []
 
-    async def no_write(*_a, **_kw):
-        return None
-
-    monkeypatch.setattr(retriever, "retrieve_async", no_docs)
-    monkeypatch.setattr(retriever, "add_finding_async", no_write)
     monkeypatch.setattr(web_search, "search_async", no_results)
 
 

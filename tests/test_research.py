@@ -1,7 +1,6 @@
 """The research spine: planner clamping, RAG fallback, citation numbering, finalize."""
 
 import pytest
-from langchain_core.documents import Document
 
 from backend import config
 from backend.graph.nodes.research import (
@@ -11,10 +10,6 @@ from backend.graph.nodes.research import (
     planner_node,
     researcher_node,
 )
-
-
-def _doc(text, source):
-    return Document(page_content=text, metadata={"source": source})
 
 
 class TestPlannerNode:
@@ -87,24 +82,16 @@ class TestPlannerNode:
 
 class TestResearcherNode:
     @pytest.mark.asyncio
-    async def test_empty_store_falls_back_to_web_search(self, fake_llm, monkeypatch):
+    async def test_searches_the_web_for_its_subtask(self, fake_llm, monkeypatch):
         fake_llm(text="briefing")
-        from backend.tools import retriever, web_search
+        from backend.tools import web_search
 
         searched = []
-
-        async def no_docs(*_a, **_kw):
-            return []
 
         async def search(query, n):
             searched.append(query)
             return [{"title": "T", "url": "https://e.com", "snippet": "s"}]
 
-        async def noop_write(*_a, **_kw):
-            return None
-
-        monkeypatch.setattr(retriever, "retrieve_async", no_docs)
-        monkeypatch.setattr(retriever, "add_finding_async", noop_write)
         monkeypatch.setattr(web_search, "search_async", search)
 
         result = await researcher_node(
@@ -112,83 +99,56 @@ class TestResearcherNode:
         )
         assert searched == ["sub"]
         assert result["researcher_findings"][0]["sources"] == ["https://e.com"]
+        assert result["researcher_findings"][0]["iteration"] == 1
 
     @pytest.mark.asyncio
-    async def test_a_well_stocked_store_skips_the_web(self, fake_llm, monkeypatch):
-        fake_llm(text="briefing")
-        from backend.tools import retriever, web_search
-
-        searched = []
-
-        async def docs(*_a, **_kw):
-            return [_doc("a", "finding: x"), _doc("b", "finding: y")]
-
-        async def search(query, n):
-            searched.append(query)
-            return []
-
-        async def noop_write(*_a, **_kw):
-            return None
-
-        monkeypatch.setattr(retriever, "retrieve_async", docs)
-        monkeypatch.setattr(retriever, "add_finding_async", noop_write)
-        monkeypatch.setattr(web_search, "search_async", search)
-
-        result = await researcher_node(
-            {"session_id": "s", "topic": "t", "subtask": "sub", "iteration": 2}
-        )
-        assert searched == []  # RAG_MIN_HITS satisfied, so the web is not consulted
-        assert result["researcher_findings"][0]["sources"] == ["finding: x", "finding: y"]
-
-    @pytest.mark.asyncio
-    async def test_citation_numbering_runs_continuously_across_both_blocks(
-        self, fake_llm, monkeypatch
-    ):
+    async def test_citations_are_numbered_from_one(self, fake_llm, monkeypatch):
         llm = fake_llm(text="briefing")
-        from backend.tools import retriever, web_search
-
-        async def one_doc(*_a, **_kw):
-            return [_doc("chunk text", "finding: earlier")]
+        from backend.tools import web_search
 
         async def search(*_a, **_kw):
-            return [{"title": "T", "url": "https://e.com", "snippet": "s"}]
+            return [
+                {"title": "First", "url": "https://a.com", "snippet": "s"},
+                {"title": "Second", "url": "https://b.com", "snippet": "s"},
+            ]
 
-        async def noop_write(*_a, **_kw):
-            return None
-
-        monkeypatch.setattr(retriever, "retrieve_async", one_doc)
-        monkeypatch.setattr(retriever, "add_finding_async", noop_write)
         monkeypatch.setattr(web_search, "search_async", search)
 
         await researcher_node({"session_id": "s", "topic": "t", "subtask": "sub", "iteration": 1})
         prompt = llm.prompts[0]
-        # The one retrieved chunk takes [1], so the first web result must be [2]
-        # or the briefing's inline citations point at the wrong source.
-        assert "[1] finding: earlier" in prompt
-        assert "[2] T" in prompt
+        assert "[1] First" in prompt
+        assert "[2] Second" in prompt
 
     @pytest.mark.asyncio
-    async def test_a_failed_write_back_does_not_lose_the_finding(self, fake_llm, monkeypatch):
+    async def test_duplicate_urls_are_cited_once(self, fake_llm, monkeypatch):
         fake_llm(text="briefing")
-        from backend.tools import retriever, web_search
+        from backend.tools import web_search
 
-        async def no_docs(*_a, **_kw):
-            return []
+        async def search(*_a, **_kw):
+            return [
+                {"title": "A", "url": "https://a.com", "snippet": "s"},
+                {"title": "A again", "url": "https://a.com", "snippet": "s"},
+                {"title": "B", "url": "", "snippet": "s"},
+            ]
 
-        async def no_results(*_a, **_kw):
-            return []
-
-        async def boom(*_a, **_kw):
-            raise RuntimeError("database is locked")
-
-        monkeypatch.setattr(retriever, "retrieve_async", no_docs)
-        monkeypatch.setattr(web_search, "search_async", no_results)
-        monkeypatch.setattr(retriever, "add_finding_async", boom)
+        monkeypatch.setattr(web_search, "search_async", search)
 
         result = await researcher_node(
             {"session_id": "s", "topic": "t", "subtask": "sub", "iteration": 1}
         )
+        assert result["researcher_findings"][0]["sources"] == ["https://a.com"]
+
+    @pytest.mark.asyncio
+    async def test_a_search_that_returns_nothing_still_produces_a_finding(
+        self, fake_llm, no_network
+    ):
+        """Search failure degrades the briefing; it must not fail the round."""
+        fake_llm(text="briefing")
+        result = await researcher_node(
+            {"session_id": "s", "topic": "t", "subtask": "sub", "iteration": 1}
+        )
         assert result["researcher_findings"][0]["content"] == "briefing"
+        assert result["researcher_findings"][0]["sources"] == []
 
 
 class TestFinalizeNode:

@@ -7,9 +7,6 @@ langchain-core
 langchain-google-genai
 # Imported directly by the node modules and the tools, not just transitively.
 pydantic
-# Embedded per-session vector store -- no server, no Docker.
-langchain-chroma
-chromadb
 ddgs
 
 # Tests only:

@@ -111,18 +111,12 @@ subtask using the source material below.
 Overall research topic: {topic}
 Your subtask: {subtask}
 
---- SESSION KNOWLEDGE BASE (uploaded documents and findings from earlier rounds) ---
-{doc_context}
-
 --- WEB SEARCH RESULTS ---
 {web_context}
 
 Write a focused, factual briefing that answers your subtask:
-- Prefer the session knowledge base where it genuinely answers the subtask; treat the web
-  results as filling what the knowledge base cannot.
 - Prefer specifics (numbers, names, dates, mechanisms) over generalities.
-- Cite the source inline as [1], [2], ... matching the numbered sources above. The numbering
-  runs continuously across both blocks.
+- Cite the source inline as [1], [2], ... matching the numbered sources above.
 - Where the sources disagree with each other, say so explicitly.
 - If the sources do not answer part of the subtask, state that plainly rather than
   filling the gap with assumption.
@@ -174,8 +168,8 @@ tools, and you are expected to use them to gather evidence before any verdict is
 
 Your tools:
 - check_coverage(subtask): does the draft actually address one of the planned subtasks?
-- verify_claim(claim): looks a factual claim up in the session's knowledge base, falling
-  back to web search. Use it on claims that matter and that you doubt.
+- verify_claim(claim): looks a factual claim up with a fresh web search. Use it on claims
+  that matter and that you doubt.
 - check_grounding(statement): does one specific statement in the draft trace back to what
   the researchers actually found, or was it invented in the write-up?
 

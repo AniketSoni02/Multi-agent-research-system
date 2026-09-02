@@ -37,7 +37,6 @@ async def health():
     return {
         "status": "ok",
         "chat_model": config.CHAT_MODEL,
-        "embed_model": config.EMBED_MODEL,
         "max_iterations": config.MAX_ITERATIONS,
         "max_critic_tool_calls": config.MAX_CRITIC_TOOL_CALLS,
         "api_key_configured": bool(config.GEMINI_API_KEY),

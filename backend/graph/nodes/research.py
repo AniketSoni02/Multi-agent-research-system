@@ -9,7 +9,7 @@ from backend import config
 from backend.graph import prompts
 from backend.graph.nodes.common import ask, call, get_llm
 from backend.graph.state import Finding, ResearcherInput, ResearchState
-from backend.tools import retriever, web_search
+from backend.tools import web_search
 
 logger = logging.getLogger(__name__)
 
@@ -65,46 +65,26 @@ async def planner_node(state: ResearchState) -> dict:
 
 
 async def researcher_node(state: ResearcherInput) -> dict:
-    session_id = state["session_id"]
     subtask = state["subtask"]
 
-    # RAG first. In round one the store is empty and every branch falls through
-    # to the web; by round two it holds round one's briefings.
-    docs = await retriever.retrieve_async(session_id, subtask, k=config.RAG_K)
-    doc_context, doc_sources = retriever.format_documents(docs, start_index=1)
-
-    web_results = []
-    if len(docs) < config.RAG_MIN_HITS:
-        web_results = await web_search.search_async(subtask, config.WEB_RESULTS_PER_SUBTASK)
-    # Numbering continues past the retrieved chunks so [1]..[n] in the briefing
-    # resolve unambiguously across both blocks.
-    web_context = web_search.format_results(web_results, start_index=len(docs) + 1)
+    web_results = await web_search.search_async(subtask, config.WEB_RESULTS_PER_SUBTASK)
+    web_context = web_search.format_results(web_results, start_index=1)
 
     answer = await ask(
         prompts.RESEARCHER.format(
             topic=state["topic"],
             subtask=subtask,
-            doc_context=doc_context,
             web_context=web_context,
         )
     )
 
-    sources = list(dict.fromkeys(doc_sources + [r["url"] for r in web_results if r["url"]]))
+    sources = list(dict.fromkeys(r["url"] for r in web_results if r["url"]))
     finding: Finding = {
         "subtask": subtask,
         "content": answer,
         "sources": sources,
         "iteration": state["iteration"],
     }
-
-    try:
-        await retriever.add_finding_async(
-            session_id, subtask, answer, sources, state["iteration"]
-        )
-    except Exception as exc:
-        # The finding is already in the return value, so a failed write-back
-        # costs later retrieval, not this round's research.
-        logger.warning("could not write finding back to the store: %s", exc)
 
     # A one-item list: operator.add on the state field appends it alongside the
     # findings from every sibling branch and every earlier round.
