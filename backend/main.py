@@ -37,9 +37,23 @@ async def health():
     return {
         "status": "ok",
         "chat_model": config.CHAT_MODEL,
+        "embed_model": config.EMBED_MODEL,
         "max_iterations": config.MAX_ITERATIONS,
+        "max_critic_tool_calls": config.MAX_CRITIC_TOOL_CALLS,
         "api_key_configured": bool(config.GEMINI_API_KEY),
     }
+
+
+# The critic's scratchpad holds LangChain message objects, which json.dumps
+# cannot encode -- left in, it would kill the stream mid-run. It is also of no
+# use to the browser: the UI reads the tool calls from tool_evidence.
+_UNSERIALIZABLE_KEYS = {"critic_messages"}
+
+
+def _serializable(node_output):
+    if not isinstance(node_output, dict):
+        return node_output
+    return {k: v for k, v in node_output.items() if k not in _UNSERIALIZABLE_KEYS}
 
 
 @app.get("/api/research/stream")
@@ -65,6 +79,7 @@ async def research_stream(session_id: str, topic: str):
                     "event": "start",
                     "topic": topic,
                     "max_iterations": config.MAX_ITERATIONS,
+                    "max_critic_tool_calls": config.MAX_CRITIC_TOOL_CALLS,
                 }
             )
         }
@@ -77,7 +92,10 @@ async def research_stream(session_id: str, topic: str):
             ):
                 for node_name, node_output in update.items():
                     yield {
-                        "data": json.dumps({"node": node_name, "output": node_output})
+                        "data": json.dumps(
+                            {"node": node_name, "output": _serializable(node_output)},
+                            default=str,
+                        )
                     }
         except Exception as exc:
             logger.exception("research run failed")

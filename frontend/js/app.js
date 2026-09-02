@@ -54,19 +54,20 @@
 
   /* ---------------------------------------------------------------- report */
 
-  function showReport(markdown, scroll) {
+  /* `approved` comes from the graph rather than being inferred from the report's
+     text, so a report that merely happens to open with a blockquote is not
+     mislabelled. */
+  function showReport(markdown, approved, scroll) {
     lastReport = markdown;
     el.reportBody.innerHTML = marked.parse(markdown);
-    el.reportStatus.textContent = markdown.startsWith(">")
-      ? "Finalized with open gaps"
-      : "Approved by the Critic";
+    el.reportStatus.textContent = approved ? "Approved by the Critic" : "Finalized with open gaps";
     el.reportSection.classList.remove("hidden");
     if (scroll) el.reportSection.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  function renderReport(markdown) {
-    showReport(markdown, true);
-    SessionHistory.upsert({ id: sessionId, topic: currentTopic, report: markdown });
+  function renderReport(markdown, approved) {
+    showReport(markdown, approved, true);
+    SessionHistory.upsert({ id: sessionId, topic: currentTopic, report: markdown, approved });
   }
 
   el.copyBtn.addEventListener("click", async () => {
@@ -179,7 +180,11 @@
     Pipeline.reset();
 
     if (record.report) {
-      showReport(record.report, true);
+      // Older history entries predate the flag; they were saved with the note
+      // prefix, so fall back to reading it.
+      const approved =
+        record.approved === undefined ? !record.report.startsWith(">") : record.approved;
+      showReport(record.report, approved, true);
       Pipeline.log(`Loaded from history: ${currentTopic}`);
     } else {
       el.reportSection.classList.add("hidden");

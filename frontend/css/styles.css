@@ -467,6 +467,14 @@ body {
   background: rgba(224, 93, 102, 0.06);
 }
 
+/* The router sends simple questions straight to an answer, so the research
+   stages never run. Dim them deliberately rather than leaving them looking
+   stalled. */
+.stage[data-state="skipped"] {
+  opacity: 0.4;
+  border-style: dashed;
+}
+
 .stage-dot {
   width: 8px;
   height: 8px;
@@ -486,6 +494,10 @@ body {
 
 .stage[data-state="error"] .stage-dot {
   background: var(--danger);
+}
+
+.stage[data-state="skipped"] .stage-dot {
+  background: var(--text-muted);
 }
 
 .spinner {
