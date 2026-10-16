@@ -37,7 +37,8 @@ MAX_CRITIC_TOOL_CALLS = int(os.getenv("MAX_CRITIC_TOOL_CALLS", "5"))
 # would otherwise fire five calls at once. Set to 0 to disable.
 LLM_MIN_INTERVAL_SECONDS = float(os.getenv("LLM_MIN_INTERVAL_SECONDS", "2.0"))
 
-FRONTEND_DIR = PROJECT_ROOT / "frontend"
+# Lives in public/ so Vercel serves it from its CDN; locally main.py mounts it.
+FRONTEND_DIR = PROJECT_ROOT / "public"
 
 # Test hook: forces the critic to reject the first draft so the loop-back path
 # can be exercised without depending on the model's judgement.

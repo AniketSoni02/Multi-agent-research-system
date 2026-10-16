@@ -92,6 +92,19 @@ That probes all three things the graph depends on: chat, structured output, **to
 Open <http://localhost:8000>. The backend serves the frontend itself, so the page is
 same-origin with the API — no CORS setup, and `EventSource` works.
 
+## Deploy to Vercel
+
+The repo deploys to Vercel as-is: `app.py` at the root exposes the FastAPI app as a
+Python function, and `public/` is served from the CDN on the same origin.
+
+1. Import the repository at <https://vercel.com/new> (framework preset: FastAPI).
+2. Add `GEMINI_API_KEY` under **Settings → Environment Variables** (and any of the
+   optional overrides in `backend/config.py`, e.g. `CHAT_MODEL`).
+3. Deploy. `/api/health` reports `api_key_configured: true` once the key is picked up.
+
+`vercel.json` lets a research run stream for up to 300 s, the Hobby plan's ceiling. Raise
+`maxDuration` (up to 800) on Pro if long multi-round runs get cut off.
+
 ## Tests
 
 ```bash
@@ -124,7 +137,7 @@ exactly **one** LLM call end to end.
 
 All nodes are async — `Send()` branches only run concurrently if their bodies await.
 
-**Frontend** (`frontend/`) is plain HTML + Tailwind (CDN) + vanilla JS, styled to the
+**Frontend** (`public/`) is plain HTML + Tailwind (CDN) + vanilla JS, styled to the
 `design.md` "Liquid Blue Glass" token system. `pipeline.js` drives the live stepper,
 `sse-client.js` consumes the event stream, `history.js` is the navbar session history,
 and `app.js` handles the form and the report.

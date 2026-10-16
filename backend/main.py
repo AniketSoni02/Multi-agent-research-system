@@ -127,7 +127,10 @@ class RevalidatingStaticFiles(StaticFiles):
         return response
 
 
-# Mounted last so it cannot shadow the /api routes above.
-app.mount(
-    "/", RevalidatingStaticFiles(directory=str(config.FRONTEND_DIR), html=True), name="frontend"
-)
+# Mounted last so it cannot shadow the /api routes above. On Vercel, public/ is
+# served by the CDN and is not bundled into the function, so there is nothing
+# to mount -- StaticFiles would refuse a missing directory at import time.
+if config.FRONTEND_DIR.is_dir():
+    app.mount(
+        "/", RevalidatingStaticFiles(directory=str(config.FRONTEND_DIR), html=True), name="frontend"
+    )
